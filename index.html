@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Meteor Dodge</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel: rgba(9, 16, 31, 0.82);
+      --line: rgba(255, 255, 255, 0.18);
+      --text: #f4f7fb;
+      --muted: #aebbd0;
+      --gold: #ffd166;
+      --mint: #71f5b9;
+      --danger: #ff6978;
+      --blue: #74d2ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 18% 15%, rgba(116, 210, 255, 0.22), transparent 26%),
+        radial-gradient(circle at 84% 24%, rgba(255, 209, 102, 0.13), transparent 22%),
+        linear-gradient(145deg, #070b18 0%, #101527 45%, #111827 100%);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    .game-shell {
+      width: min(96vw, 980px);
+      display: grid;
+      gap: 12px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .stat {
+      min-height: 54px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    }
+
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.1;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .arena-wrap {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #050814;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.38);
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      display: block;
+      background: #050814;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background: rgba(3, 7, 17, 0.66);
+      backdrop-filter: blur(3px);
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .message {
+      width: min(520px, 100%);
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(9, 16, 31, 0.92);
+      text-align: center;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1;
+    }
+
+    p {
+      margin: 8px 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .keyline {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin: 16px 0;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .coin { background: var(--gold); }
+    .heart { background: var(--mint); }
+    .meteor { background: #9a7b68; }
+    .spike { background: var(--danger); }
+    .splotch { background: #c72538; }
+
+    button {
+      min-height: 44px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue);
+      color: #06101d;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        overflow: auto;
+        padding: 10px 0;
+      }
+
+      .topbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .stat strong {
+        font-size: 20px;
+      }
+
+      .message {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell" aria-label="Space Meteor Dodge game">
+    <section class="topbar" aria-label="Game stats">
+      <div class="stat"><span>Score</span><strong id="score">0 / 100</strong></div>
+      <div class="stat"><span>Lives</span><strong id="lives">3</strong></div>
+      <div class="stat"><span>Level</span><strong id="level">1</strong></div>
+      <div class="stat"><span>Time</span><strong id="time">0s</strong></div>
+    </section>
+
+    <section class="arena-wrap">
+      <canvas id="game" width="960" height="540" aria-label="Game field"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="message">
+          <h1 id="title">Space Meteor Dodge</h1>
+          <p id="summary">Steer the spaceship with the <span class="keyline">arrow keys</span>. From level 2 onward, press <span class="keyline">Space</span> to fire lasers.</p>
+          <div class="legend" aria-label="Object guide">
+            <span class="chip"><span class="dot coin"></span>Point object: +1</span>
+            <span class="chip"><span class="dot heart"></span>Health: +1 life</span>
+            <span class="chip"><span class="dot meteor"></span>Meteor: 5 hits, +5</span>
+            <span class="chip"><span class="dot spike"></span>Spike ball: -2 lives</span>
+            <span class="chip"><span class="dot splotch"></span>Red splotch: 10 hits, +15</span>
+          </div>
+          <p id="details">Reach 100 points to win. Each new level creates a checkpoint so you respawn there if you run out of lives.</p>
+          <button id="startBtn" type="button">Start Game</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-note">Arrow keys move. Space starts, restarts, or fires lasers once level 2 begins.</div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const livesEl = document.getElementById("lives");
+    const levelEl = document.getElementById("level");
+    const timeEl = document.getElementById("time");
+    const overlay = document.getElementById("overlay");
+    const titleEl = document.getElementById("title");
+    const summaryEl = document.getElementById("summary");
+    const detailsEl = document.getElementById("details");
+    const startBtn = document.getElementById("startBtn");
+
+    const GOAL_POINTS = 100;
+    const keys = new Set();
+    const stars = Array.from({ length: 110 }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.8 + 0.3,
+      speed: Math.random() * 18 + 8,
+      alpha: Math.random() * 0.65 + 0.25
+    }));
+
+    const state = {
+      running: false,
+      gameOver: false,
+      won: false,
+      score: 0,
+      lives: 3,
+      level: 1,
+      elapsed: 0,
+      lastTime: 0,
+      meteorTimer: 0,
+      coinTimer: 0,
+      spikeTimer: 0,
+      healthTimer: 0,
+      splotchTimer: 0,
+      laserCooldown: 0,
+      checkpointNotice: 0,
+      ship: { x: 120, y: 270, radius: 20, speed: 250, invincible: 0 },
+      checkpoint: { level: 1, elapsed: 0, score: 0 },
+      meteors: [],
+      coins: [],
+      hearts: [],
+      spikes: [],
+      lasers: [],
+      splotches: []
+    };
+
+    function resetGame() {
+      state.running = true;
+      state.gameOver = false;
+      state.won = false;
+      state.score = 0;
+      state.lives = 3;
+      state.level = 1;
+      state.elapsed = 0;
+      state.lastTime = performance.now();
+      state.meteorTimer = 0;
+      state.coinTimer = 0;
+      state.spikeTimer = 0;
+      state.healthTimer = 0;
+      state.splotchTimer = 0;
+      state.laserCooldown = 0;
+      state.checkpointNotice = 2.5;
+      state.meteors = [];
+      state.coins = [];
+      state.hearts = [];
+      state.spikes = [];
+      state.lasers = [];
+      state.splotches = [];
+      state.checkpoint = { level: 1, elapsed: 0, score: 0 };
+      state.ship.x = 120;
+      state.ship.y = canvas.height / 2;
+      state.ship.speed = 250;
+      state.ship.invincible = 0;
+      overlay.classList.add("hidden");
+      updateHud();
+      requestAnimationFrame(loop);
+    }
+
+    function showOverlay(title, summary, details, buttonText) {
+      titleEl.textContent = title;
+      summaryEl.innerHTML = summary;
+      detailsEl.textContent = details;
+      startBtn.textContent = buttonText;
+      overlay.classList.remove("hidden");
+    }
+
+    function updateHud() {
+      scoreEl.textContent = `${state.score} / ${GOAL_POINTS}`;
+      livesEl.textContent = Math.max(0, state.lives);
+      levelEl.textContent = state.level;
+      timeEl.textContent = `${Math.floor(state.elapsed)}s`;
+    }
+
+    function getLevel() {
+      if (state.elapsed >= 60) return 4;
+      if (state.elapsed >= 45) return 3;
+      if (state.elapsed >= 15) return 2;
+      return 1;
+    }
+
+    function levelSettings() {
+      if (state.level === 4) {
+        return { meteorEvery: 0.26, coinEvery: 0.95, spikeEvery: 0.7, splotchEvery: 2.3, meteorSpeed: 360, meteorSize: 1.62, spikeSpeed: 340, shipSpeed: 430 };
+      }
+      if (state.level === 3) {
+        return { meteorEvery: 0.29, coinEvery: 1.0, spikeEvery: 0.72, splotchEvery: 999, meteorSpeed: 315, meteorSize: 1.42, spikeSpeed: 300, shipSpeed: 385 };
+      }
+      if (state.level === 2) {
+        return { meteorEvery: 0.52, coinEvery: 1.12, spikeEvery: 999, splotchEvery: 999, meteorSpeed: 235, meteorSize: 1.16, spikeSpeed: 0, shipSpeed: 330 };
+      }
+      return { meteorEvery: 1.05, coinEvery: 1.3, spikeEvery: 999, splotchEvery: 999, meteorSpeed: 150, meteorSize: 1, spikeSpeed: 0, shipSpeed: 270 };
+    }
+
+    function spawnMeteor() {
+      const settings = levelSettings();
+      const radius = (Math.random() * 19 + 18) * settings.meteorSize;
+      state.meteors.push({
+        x: canvas.width + radius,
+        y: Math.random() * (canvas.height - radius * 2) + radius,
+        radius,
+        hp: state.level >= 2 ? 5 : 999,
+        maxHp: state.level >= 2 ? 5 : 999,
+        speed: settings.meteorSpeed + Math.random() * 70,
+        spin: Math.random() * Math.PI,
+        spinSpeed: (Math.random() - 0.5) * 2.6,
+        dents: Array.from({ length: 9 }, () => Math.random() * 0.28 + 0.78)
+      });
+    }
+
+    function spawnCoin() {
+      state.coins.push({
+        x: canvas.width + 18,
+        y: Math.random() * (canvas.height - 70) + 35,
+        radius: 13,
+        speed: 135 + state.level * 22,
+        bob: Math.random() * Math.PI * 2
+      });
+    }
+
+    function spawnHeart() {
+      state.hearts.push({
+        x: canvas.width + 18,
+        y: Math.random() * (canvas.height - 80) + 40,
+        radius: 15,
+        speed: 120 + state.level * 18,
+        bob: Math.random() * Math.PI * 2
+      });
+    }
+
+    function spawnSpike() {
+      const settings = levelSettings();
+      state.spikes.push({
+        x: canvas.width + 26,
+        y: Math.random() * (canvas.height - 80) + 40,
+        radius: Math.random() * 7 + 20,
+        speed: settings.spikeSpeed + Math.random() * 80,
+        spin: Math.random() * Math.PI,
+        spinSpeed: 3 + Math.random() * 2
+      });
+    }
+
+    function spawnSplotch() {
+      const radius = Math.random() * 14 + 36;
+      state.splotches.push({
+        x: canvas.width + radius,
+        y: Math.random() * (canvas.height - radius * 2 - 20) + radius + 10,
+        radius,
+        hp: 10,
+        maxHp: 10,
+        speed: 175 + Math.random() * 45,
+        spin: Math.random() * Math.PI,
+        spinSpeed: (Math.random() - 0.5) * 1.5,
+        blobs: Array.from({ length: 12 }, () => Math.random() * 0.34 + 0.82)
+      });
+    }
+
+    function fireLasers() {
+      if (state.level < 2 || state.laserCooldown > 0) return;
+      const count = state.level >= 4 ? 3 : state.level >= 3 ? 2 : 1;
+      const gap = 12;
+      const startY = state.ship.y - ((count - 1) * gap) / 2;
+      for (let i = 0; i < count; i += 1) {
+        state.lasers.push({
+          x: state.ship.x + 28,
+          y: startY + i * gap,
+          width: 34,
+          height: 4,
+          speed: 610
+        });
+      }
+      state.laserCooldown = 0.24;
+    }
+
+    function setCheckpoint(level) {
+      state.checkpoint = {
+        level,
+        elapsed: level === 4 ? 60 : level === 3 ? 45 : level === 2 ? 15 : 0,
+        score: state.score
+      };
+      state.checkpointNotice = 2.8;
+    }
+
+    function respawnAtCheckpoint() {
+      const checkpoint = state.checkpoint;
+      state.running = true;
+      state.gameOver = false;
+      state.won = false;
+      state.score = checkpoint.score;
+      state.lives = 3;
+      state.level = checkpoint.level;
+      state.elapsed = checkpoint.elapsed;
+      state.lastTime = performance.now();
+      state.meteorTimer = 0;
+      state.coinTimer = 0;
+      state.spikeTimer = 0;
+      state.healthTimer = 0;
+      state.splotchTimer = 0;
+      state.laserCooldown = 0;
+      state.checkpointNotice = 3;
+      state.meteors = [];
+      state.coins = [];
+      state.hearts = [];
+      state.spikes = [];
+      state.lasers = [];
+      state.splotches = [];
+      state.ship.x = 120;
+      state.ship.y = canvas.height / 2;
+      state.ship.invincible = 2;
+      overlay.classList.add("hidden");
+      updateHud();
+    }
+
+    function moveShip(dt) {
+      const ship = state.ship;
+      let dx = 0;
+      let dy = 0;
+      if (keys.has("ArrowLeft")) dx -= 1;
+      if (keys.has("ArrowRight")) dx += 1;
+      if (keys.has("ArrowUp")) dy -= 1;
+      if (keys.has("ArrowDown")) dy += 1;
+
+      if (dx || dy) {
+        const len = Math.hypot(dx, dy);
+        ship.x += (dx / len) * ship.speed * dt;
+        ship.y += (dy / len) * ship.speed * dt;
+      }
+
+      ship.x = Math.max(ship.radius + 6, Math.min(canvas.width - ship.radius - 6, ship.x));
+      ship.y = Math.max(ship.radius + 6, Math.min(canvas.height - ship.radius - 6, ship.y));
+      ship.invincible = Math.max(0, ship.invincible - dt);
+    }
+
+    function updateObjects(dt) {
+      const settings = levelSettings();
+      state.meteorTimer += dt;
+      state.coinTimer += dt;
+      state.healthTimer += dt;
+      state.spikeTimer += dt;
+      state.splotchTimer += dt;
+      state.laserCooldown = Math.max(0, state.laserCooldown - dt);
+      state.checkpointNotice = Math.max(0, state.checkpointNotice - dt);
+
+      if (state.meteorTimer >= settings.meteorEvery) {
+        state.meteorTimer = 0;
+        spawnMeteor();
+      }
+      if (state.coinTimer >= settings.coinEvery) {
+        state.coinTimer = 0;
+        spawnCoin();
+      }
+      if (state.healthTimer >= 15) {
+        state.healthTimer = 0;
+        spawnHeart();
+      }
+      if (state.level >= 3 && state.spikeTimer >= settings.spikeEvery) {
+        state.spikeTimer = 0;
+        spawnSpike();
+      }
+      if (state.level >= 4 && state.splotchTimer >= settings.splotchEvery) {
+        state.splotchTimer = 0;
+        spawnSplotch();
+      }
+
+      for (const meteor of state.meteors) {
+        meteor.x -= meteor.speed * dt;
+        meteor.spin += meteor.spinSpeed * dt;
+      }
+      for (const laser of state.lasers) {
+        laser.x += laser.speed * dt;
+      }
+      for (const coin of state.coins) {
+        coin.x -= coin.speed * dt;
+        coin.bob += dt * 5;
+      }
+      for (const heart of state.hearts) {
+        heart.x -= heart.speed * dt;
+        heart.bob += dt * 4;
+      }
+      for (const spike of state.spikes) {
+        spike.x -= spike.speed * dt;
+        spike.spin += spike.spinSpeed * dt;
+      }
+      for (const splotch of state.splotches) {
+        splotch.x -= splotch.speed * dt;
+        splotch.spin += splotch.spinSpeed * dt;
+      }
+
+      state.meteors = state.meteors.filter(item => item.x > -item.radius - 10);
+      state.lasers = state.lasers.filter(item => item.x < canvas.width + item.width);
+      state.coins = state.coins.filter(item => item.x > -item.radius - 10);
+      state.hearts = state.hearts.filter(item => item.x > -item.radius - 10);
+      state.spikes = state.spikes.filter(item => item.x > -item.radius - 18);
+      state.splotches = state.splotches.filter(item => item.x > -item.radius - 20);
+    }
+
+    function distance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function hitShip(amount) {
+      if (state.ship.invincible > 0) return;
+      state.lives -= amount;
+      state.ship.invincible = 1.1;
+      if (state.lives <= 0) {
+        if (state.checkpoint.level > 1) {
+          respawnAtCheckpoint();
+        } else {
+          finish(false);
+        }
+      }
+    }
+
+    function addScore(points) {
+      state.score += points;
+      if (state.score >= GOAL_POINTS) finish(true);
+    }
+
+    function laserHitsCircle(laser, target) {
+      const nearestX = Math.max(laser.x, Math.min(target.x, laser.x + laser.width));
+      const nearestY = Math.max(laser.y - laser.height / 2, Math.min(target.y, laser.y + laser.height / 2));
+      return Math.hypot(nearestX - target.x, nearestY - target.y) < target.radius;
+    }
+
+    function handleCollisions() {
+      const shipHitRadius = state.ship.radius * 0.78;
+
+      for (const laser of state.lasers) {
+        if (laser.used) continue;
+        for (const meteor of state.meteors) {
+          if (!laser.used && laserHitsCircle(laser, meteor)) {
+            meteor.hp -= 1;
+            laser.used = true;
+            if (meteor.hp <= 0) {
+              meteor.destroyed = true;
+              addScore(5);
+            }
+          }
+        }
+        for (const splotch of state.splotches) {
+          if (!laser.used && laserHitsCircle(laser, splotch)) {
+            splotch.hp -= 1;
+            laser.used = true;
+            if (splotch.hp <= 0) {
+              splotch.destroyed = true;
+              addScore(15);
+            }
+          }
+        }
+      }
+
+      state.lasers = state.lasers.filter(laser => !laser.used);
+      state.meteors = state.meteors.filter(meteor => !meteor.destroyed);
+      state.splotches = state.splotches.filter(splotch => !splotch.destroyed);
+
+      state.coins = state.coins.filter(coin => {
+        if (distance(state.ship, coin) < shipHitRadius + coin.radius) {
+          addScore(1);
+          return false;
+        }
+        return true;
+      });
+
+      state.hearts = state.hearts.filter(heart => {
+        if (distance(state.ship, heart) < shipHitRadius + heart.radius) {
+          state.lives += 1;
+          return false;
+        }
+        return true;
+      });
+
+      state.meteors = state.meteors.filter(meteor => {
+        if (distance(state.ship, meteor) < shipHitRadius + meteor.radius * 0.82) {
+          hitShip(1);
+          return false;
+        }
+        return true;
+      });
+
+      state.spikes = state.spikes.filter(spike => {
+        if (distance(state.ship, spike) < shipHitRadius + spike.radius * 0.86) {
+          hitShip(2);
+          return false;
+        }
+        return true;
+      });
+
+      state.splotches = state.splotches.filter(splotch => {
+        if (distance(state.ship, splotch) < shipHitRadius + splotch.radius * 0.9) {
+          hitShip(2);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    function finish(won) {
+      state.running = false;
+      state.gameOver = true;
+      state.won = won;
+      const title = won ? "Mission Complete!" : "Ship Destroyed";
+      const summary = won
+        ? "You reached <span class=\"keyline\">100 points</span> and escaped the meteor field."
+        : "The hazards took all your lives before the first checkpoint. Try again and keep moving.";
+      const details = won
+        ? `Final time: ${Math.floor(state.elapsed)} seconds.`
+        : `Score: ${state.score} / ${GOAL_POINTS}. Level reached: ${state.level}.`;
+      showOverlay(title, summary, details, "Restart Game");
+      updateHud();
+    }
+
+    function drawBackground(dt) {
+      ctx.fillStyle = "#050814";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (const star of stars) {
+        star.x -= star.speed * dt * (0.8 + state.level * 0.18);
+        if (star.x < -4) {
+          star.x = canvas.width + 4;
+          star.y = Math.random() * canvas.height;
+        }
+        ctx.globalAlpha = star.alpha;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawShip() {
+      const ship = state.ship;
+      const flicker = ship.invincible > 0 && Math.floor(ship.invincible * 12) % 2 === 0;
+      if (flicker) ctx.globalAlpha = 0.45;
+
+      ctx.save();
+      ctx.translate(ship.x, ship.y);
+      ctx.fillStyle = "#d8f3ff";
+      ctx.strokeStyle = "#74d2ff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(25, 0);
+      ctx.lineTo(-17, -17);
+      ctx.lineTo(-10, 0);
+      ctx.lineTo(-17, 17);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#2c6f9e";
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 8, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffb454";
+      ctx.beginPath();
+      ctx.moveTo(-17, -8);
+      ctx.lineTo(-34 - Math.random() * 8, 0);
+      ctx.lineTo(-17, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawMeteor(meteor) {
+      ctx.save();
+      ctx.translate(meteor.x, meteor.y);
+      ctx.rotate(meteor.spin);
+      ctx.fillStyle = "#8f7461";
+      ctx.strokeStyle = "#d1b29b";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < meteor.dents.length; i += 1) {
+        const angle = (i / meteor.dents.length) * Math.PI * 2;
+        const r = meteor.radius * meteor.dents[i];
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(42, 30, 25, 0.42)";
+      for (let i = 0; i < 3; i += 1) {
+        ctx.beginPath();
+        ctx.arc(
+          Math.cos(i * 2.1) * meteor.radius * 0.34,
+          Math.sin(i * 1.7) * meteor.radius * 0.34,
+          meteor.radius * (0.1 + i * 0.025),
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      if (meteor.maxHp < 999) {
+        ctx.fillStyle = "rgba(5, 8, 20, 0.72)";
+        ctx.fillRect(-meteor.radius, -meteor.radius - 12, meteor.radius * 2, 5);
+        ctx.fillStyle = "#74d2ff";
+        ctx.fillRect(-meteor.radius, -meteor.radius - 12, meteor.radius * 2 * (meteor.hp / meteor.maxHp), 5);
+      }
+      ctx.restore();
+    }
+
+    function drawLaser(laser) {
+      ctx.save();
+      ctx.shadowColor = "#74d2ff";
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "#9be7ff";
+      ctx.fillRect(laser.x, laser.y - laser.height / 2, laser.width, laser.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(laser.x + laser.width - 8, laser.y - 1, 8, 2);
+      ctx.restore();
+    }
+
+    function drawCoin(coin) {
+      const y = coin.y + Math.sin(coin.bob) * 5;
+      ctx.save();
+      ctx.translate(coin.x, y);
+      ctx.fillStyle = "#ffd166";
+      ctx.strokeStyle = "#fff4b2";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, coin.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#805b00";
+      ctx.font = "bold 15px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("+", 0, 1);
+      ctx.restore();
+    }
+
+    function drawHeart(heart) {
+      const y = heart.y + Math.sin(heart.bob) * 5;
+      ctx.save();
+      ctx.translate(heart.x, y);
+      ctx.fillStyle = "#71f5b9";
+      ctx.strokeStyle = "#d6ffe8";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 12);
+      ctx.bezierCurveTo(-22, -3, -10, -22, 0, -10);
+      ctx.bezierCurveTo(10, -22, 22, -3, 0, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSpike(spike) {
+      ctx.save();
+      ctx.translate(spike.x, spike.y);
+      ctx.rotate(spike.spin);
+      ctx.fillStyle = "#4a1020";
+      ctx.strokeStyle = "#ff6978";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 10; i += 1) {
+        const angle = (i / 10) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle - 0.12) * spike.radius * 0.75, Math.sin(angle - 0.12) * spike.radius * 0.75);
+        ctx.lineTo(Math.cos(angle) * spike.radius * 1.35, Math.sin(angle) * spike.radius * 1.35);
+        ctx.lineTo(Math.cos(angle + 0.12) * spike.radius * 0.75, Math.sin(angle + 0.12) * spike.radius * 0.75);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, spike.radius * 0.82, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSplotch(splotch) {
+      ctx.save();
+      ctx.translate(splotch.x, splotch.y);
+      ctx.rotate(splotch.spin);
+      ctx.fillStyle = "#941d2b";
+      ctx.strokeStyle = "#ff7a84";
+      ctx.lineWidth = 3;
+
+      for (let i = 0; i < 12; i += 1) {
+        const angle = (i / 12) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle - 0.1) * splotch.radius * 0.82, Math.sin(angle - 0.1) * splotch.radius * 0.82);
+        ctx.lineTo(Math.cos(angle) * splotch.radius * 1.32, Math.sin(angle) * splotch.radius * 1.32);
+        ctx.lineTo(Math.cos(angle + 0.1) * splotch.radius * 0.82, Math.sin(angle + 0.1) * splotch.radius * 0.82);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      for (let i = 0; i < splotch.blobs.length; i += 1) {
+        const angle = (i / splotch.blobs.length) * Math.PI * 2;
+        const r = splotch.radius * splotch.blobs[i];
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(5, 8, 20, 0.76)";
+      ctx.fillRect(-splotch.radius, -splotch.radius - 14, splotch.radius * 2, 6);
+      ctx.fillStyle = "#ffd166";
+      ctx.fillRect(-splotch.radius, -splotch.radius - 14, splotch.radius * 2 * (splotch.hp / splotch.maxHp), 6);
+      ctx.restore();
+    }
+
+    function drawLevelNotice() {
+      const nearLevelStart = state.elapsed < 3
+        || (state.elapsed > 15 && state.elapsed < 18)
+        || (state.elapsed > 45 && state.elapsed < 48)
+        || (state.elapsed > 60 && state.elapsed < 63)
+        || state.checkpointNotice > 0;
+      if (nearLevelStart) {
+        ctx.save();
+        ctx.fillStyle = "rgba(5, 8, 20, 0.64)";
+        ctx.fillRect(canvas.width / 2 - 150, 18, 300, 42);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+        ctx.strokeRect(canvas.width / 2 - 150, 18, 300, 42);
+        ctx.fillStyle = "#f4f7fb";
+        ctx.font = "bold 20px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`Level ${state.level} Checkpoint`, canvas.width / 2, 40);
+        ctx.restore();
+      }
+    }
+
+    function draw(dt) {
+      drawBackground(dt);
+      for (const coin of state.coins) drawCoin(coin);
+      for (const heart of state.hearts) drawHeart(heart);
+      for (const laser of state.lasers) drawLaser(laser);
+      for (const meteor of state.meteors) drawMeteor(meteor);
+      for (const spike of state.spikes) drawSpike(spike);
+      for (const splotch of state.splotches) drawSplotch(splotch);
+      drawShip();
+      drawLevelNotice();
+    }
+
+    function loop(now) {
+      if (!state.running) return;
+      const dt = Math.min((now - state.lastTime) / 1000, 0.033);
+      state.lastTime = now;
+
+      state.elapsed += dt;
+      const nextLevel = getLevel();
+      if (nextLevel !== state.level) {
+        state.level = nextLevel;
+        setCheckpoint(nextLevel);
+        state.meteors = [];
+        state.spikes = [];
+        state.splotches = [];
+        state.lasers = [];
+      }
+      state.ship.speed = levelSettings().shipSpeed;
+
+      moveShip(dt);
+      updateObjects(dt);
+      handleCollisions();
+      draw(dt);
+      updateHud();
+
+      if (state.running) requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", event => {
+      if (event.key.startsWith("Arrow")) {
+        keys.add(event.key);
+        event.preventDefault();
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (state.running) fireLasers();
+        else resetGame();
+      }
+    });
+
+    window.addEventListener("keyup", event => {
+      if (event.key.startsWith("Arrow")) {
+        keys.delete(event.key);
+        event.preventDefault();
+      }
+    });
+
+    startBtn.addEventListener("click", resetGame);
+    draw(0);
+    updateHud();
+  </script>
+</body>
+</html>
