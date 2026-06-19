@@ -230,7 +230,7 @@
             <span class="chip"><span class="dot spike"></span>Spike ball: -2 lives</span>
             <span class="chip"><span class="dot splotch"></span>Red splotch: 10 hits, +15</span>
           </div>
-          <p id="details">Reach 100 points to win. Each new level creates a checkpoint so you respawn there if you run out of lives.</p>
+          <p id="details">Reach 100 points on level 4 to unlock level 5, then defeat the boss ship to win.</p>
           <button id="startBtn" type="button">Start Game</button>
         </div>
       </div>
@@ -253,6 +253,7 @@
     const startBtn = document.getElementById("startBtn");
 
     const GOAL_POINTS = 100;
+    const FULL_LIVES = 3;
     const keys = new Set();
     const stars = Array.from({ length: 110 }, () => ({
       x: Math.random() * canvas.width,
@@ -266,6 +267,7 @@
       running: false,
       gameOver: false,
       won: false,
+      phase: "play",
       score: 0,
       lives: 3,
       level: 1,
@@ -276,15 +278,21 @@
       spikeTimer: 0,
       healthTimer: 0,
       splotchTimer: 0,
+      bossPrepTimer: 0,
+      bossLaserTimer: 0,
+      bossMeteorTimer: 0,
+      bossHealthTimer: 0,
       laserCooldown: 0,
       checkpointNotice: 0,
       ship: { x: 120, y: 270, radius: 20, speed: 250, invincible: 0 },
       checkpoint: { level: 1, elapsed: 0, score: 0 },
+      boss: null,
       meteors: [],
       coins: [],
       hearts: [],
       spikes: [],
       lasers: [],
+      bossLasers: [],
       splotches: []
     };
 
@@ -292,6 +300,7 @@
       state.running = true;
       state.gameOver = false;
       state.won = false;
+      state.phase = "play";
       state.score = 0;
       state.lives = 3;
       state.level = 1;
@@ -302,6 +311,10 @@
       state.spikeTimer = 0;
       state.healthTimer = 0;
       state.splotchTimer = 0;
+      state.bossPrepTimer = 0;
+      state.bossLaserTimer = 0;
+      state.bossMeteorTimer = 0;
+      state.bossHealthTimer = 0;
       state.laserCooldown = 0;
       state.checkpointNotice = 2.5;
       state.meteors = [];
@@ -309,7 +322,9 @@
       state.hearts = [];
       state.spikes = [];
       state.lasers = [];
+      state.bossLasers = [];
       state.splotches = [];
+      state.boss = null;
       state.checkpoint = { level: 1, elapsed: 0, score: 0 };
       state.ship.x = 120;
       state.ship.y = canvas.height / 2;
@@ -336,6 +351,7 @@
     }
 
     function getLevel() {
+      if (state.phase === "bossPrep" || state.phase === "boss") return 5;
       if (state.elapsed >= 60) return 4;
       if (state.elapsed >= 45) return 3;
       if (state.elapsed >= 15) return 2;
@@ -343,8 +359,11 @@
     }
 
     function levelSettings() {
+      if (state.level === 5) {
+        return { meteorEvery: 0.9, coinEvery: 999, spikeEvery: 999, splotchEvery: 999, meteorSpeed: 185, meteorSize: 1, spikeSpeed: 0, shipSpeed: 450 };
+      }
       if (state.level === 4) {
-        return { meteorEvery: 0.26, coinEvery: 0.95, spikeEvery: 0.7, splotchEvery: 2.3, meteorSpeed: 360, meteorSize: 1.62, spikeSpeed: 340, shipSpeed: 430 };
+        return { meteorEvery: 0.26, coinEvery: 0.95, spikeEvery: 0.7, splotchEvery: 2.3, meteorSpeed: 360, meteorSize: 1.18, spikeSpeed: 340, shipSpeed: 430 };
       }
       if (state.level === 3) {
         return { meteorEvery: 0.29, coinEvery: 1.0, spikeEvery: 0.72, splotchEvery: 999, meteorSpeed: 315, meteorSize: 1.42, spikeSpeed: 300, shipSpeed: 385 };
@@ -391,12 +410,22 @@
       });
     }
 
+    function addHeartAt(x, y, speed = 0) {
+      state.hearts.push({
+        x,
+        y,
+        radius: 15,
+        speed,
+        bob: Math.random() * Math.PI * 2
+      });
+    }
+
     function spawnSpike() {
       const settings = levelSettings();
       state.spikes.push({
         x: canvas.width + 26,
         y: Math.random() * (canvas.height - 80) + 40,
-        radius: Math.random() * 7 + 20,
+        radius: state.level >= 4 ? Math.random() * 5 + 16 : Math.random() * 7 + 20,
         speed: settings.spikeSpeed + Math.random() * 80,
         spin: Math.random() * Math.PI,
         spinSpeed: 3 + Math.random() * 2
@@ -404,7 +433,7 @@
     }
 
     function spawnSplotch() {
-      const radius = Math.random() * 14 + 36;
+      const radius = state.level >= 4 ? Math.random() * 9 + 28 : Math.random() * 14 + 36;
       state.splotches.push({
         x: canvas.width + radius,
         y: Math.random() * (canvas.height - radius * 2 - 20) + radius + 10,
@@ -418,9 +447,76 @@
       });
     }
 
+    function spawnBossMeteor() {
+      const radius = Math.random() * 19 + 18;
+      state.meteors.push({
+        x: canvas.width + radius,
+        y: Math.random() * (canvas.height - radius * 2) + radius,
+        radius,
+        hp: 999,
+        maxHp: 999,
+        speed: 205 + Math.random() * 70,
+        spin: Math.random() * Math.PI,
+        spinSpeed: (Math.random() - 0.5) * 2.6,
+        dents: Array.from({ length: 9 }, () => Math.random() * 0.28 + 0.78)
+      });
+    }
+
+    function clearHazards() {
+      state.meteors = [];
+      state.coins = [];
+      state.spikes = [];
+      state.lasers = [];
+      state.bossLasers = [];
+      state.splotches = [];
+    }
+
+    function startBossPrep() {
+      if (state.phase !== "play") return;
+      state.phase = "bossPrep";
+      state.level = 5;
+      state.score = GOAL_POINTS;
+      state.lives = FULL_LIVES;
+      state.bossPrepTimer = 0;
+      state.checkpointNotice = 0;
+      clearHazards();
+      state.hearts = [];
+      for (let i = 0; i < 5; i += 1) {
+        addHeartAt(260 + i * 95, 130 + (i % 2) * 245, 0);
+      }
+      state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true };
+    }
+
+    function startBossFight(fromCheckpoint = false) {
+      state.phase = "boss";
+      state.score = GOAL_POINTS;
+      state.lives = FULL_LIVES;
+      state.level = 5;
+      state.bossPrepTimer = 0;
+      state.bossLaserTimer = 0.8;
+      state.bossMeteorTimer = 0;
+      state.bossHealthTimer = 0;
+      state.laserCooldown = 0;
+      state.checkpointNotice = fromCheckpoint ? 2.5 : 3;
+      clearHazards();
+      state.hearts = [];
+      state.boss = {
+        x: canvas.width - 150,
+        y: canvas.height / 2,
+        radius: state.ship.radius * 5,
+        hp: 80,
+        maxHp: 80,
+        drift: 0
+      };
+      state.ship.x = 120;
+      state.ship.y = canvas.height / 2;
+      state.ship.invincible = 2;
+      state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true };
+    }
+
     function fireLasers() {
       if (state.level < 2 || state.laserCooldown > 0) return;
-      const count = state.level >= 4 ? 3 : state.level >= 3 ? 2 : 1;
+      const count = state.phase === "boss" ? 5 : state.level >= 4 ? 3 : state.level >= 3 ? 2 : 1;
       const gap = 12;
       const startY = state.ship.y - ((count - 1) * gap) / 2;
       for (let i = 0; i < count; i += 1) {
@@ -438,7 +534,7 @@
     function setCheckpoint(level) {
       state.checkpoint = {
         level,
-        elapsed: level === 4 ? 60 : level === 3 ? 45 : level === 2 ? 15 : 0,
+        elapsed: level === 5 ? state.elapsed : level === 4 ? 60 : level === 3 ? 45 : level === 2 ? 15 : 0,
         score: state.score
       };
       state.checkpointNotice = 2.8;
@@ -446,11 +542,16 @@
 
     function respawnAtCheckpoint() {
       const checkpoint = state.checkpoint;
+      if (checkpoint.boss) {
+        startBossFight(true);
+        return;
+      }
       state.running = true;
       state.gameOver = false;
       state.won = false;
+      state.phase = "play";
       state.score = checkpoint.score;
-      state.lives = 3;
+      state.lives = FULL_LIVES;
       state.level = checkpoint.level;
       state.elapsed = checkpoint.elapsed;
       state.lastTime = performance.now();
@@ -496,6 +597,16 @@
 
     function updateObjects(dt) {
       const settings = levelSettings();
+      if (state.phase === "bossPrep") {
+        state.bossPrepTimer += dt;
+        state.laserCooldown = Math.max(0, state.laserCooldown - dt);
+        if (state.bossPrepTimer >= 9) startBossFight();
+      }
+
+      if (state.phase === "boss") {
+        updateBossFight(dt);
+      }
+
       state.meteorTimer += dt;
       state.coinTimer += dt;
       state.healthTimer += dt;
@@ -504,23 +615,32 @@
       state.laserCooldown = Math.max(0, state.laserCooldown - dt);
       state.checkpointNotice = Math.max(0, state.checkpointNotice - dt);
 
-      if (state.meteorTimer >= settings.meteorEvery) {
+      if (state.phase === "bossPrep") {
+        state.meteorTimer = 0;
+        state.coinTimer = 0;
+        state.spikeTimer = 0;
+        state.splotchTimer = 0;
+      } else if (state.phase === "boss") {
+        state.coinTimer = 0;
+        state.spikeTimer = 0;
+        state.splotchTimer = 0;
+      } else if (state.meteorTimer >= settings.meteorEvery) {
         state.meteorTimer = 0;
         spawnMeteor();
       }
-      if (state.coinTimer >= settings.coinEvery) {
+      if (state.phase === "play" && state.coinTimer >= settings.coinEvery) {
         state.coinTimer = 0;
         spawnCoin();
       }
-      if (state.healthTimer >= 15) {
+      if (state.phase === "play" && state.healthTimer >= 15) {
         state.healthTimer = 0;
         spawnHeart();
       }
-      if (state.level >= 3 && state.spikeTimer >= settings.spikeEvery) {
+      if (state.phase === "play" && state.level >= 3 && state.spikeTimer >= settings.spikeEvery) {
         state.spikeTimer = 0;
         spawnSpike();
       }
-      if (state.level >= 4 && state.splotchTimer >= settings.splotchEvery) {
+      if (state.phase === "play" && state.level >= 4 && state.splotchTimer >= settings.splotchEvery) {
         state.splotchTimer = 0;
         spawnSplotch();
       }
@@ -531,6 +651,9 @@
       }
       for (const laser of state.lasers) {
         laser.x += laser.speed * dt;
+      }
+      for (const bossLaser of state.bossLasers) {
+        bossLaser.x -= bossLaser.speed * dt;
       }
       for (const coin of state.coins) {
         coin.x -= coin.speed * dt;
@@ -551,10 +674,42 @@
 
       state.meteors = state.meteors.filter(item => item.x > -item.radius - 10);
       state.lasers = state.lasers.filter(item => item.x < canvas.width + item.width);
+      state.bossLasers = state.bossLasers.filter(item => item.x > -item.width - 10);
       state.coins = state.coins.filter(item => item.x > -item.radius - 10);
       state.hearts = state.hearts.filter(item => item.x > -item.radius - 10);
       state.spikes = state.spikes.filter(item => item.x > -item.radius - 18);
       state.splotches = state.splotches.filter(item => item.x > -item.radius - 20);
+    }
+
+    function updateBossFight(dt) {
+      if (!state.boss) return;
+      state.boss.drift += dt;
+      state.boss.y = canvas.height / 2 + Math.sin(state.boss.drift * 1.2) * 115;
+
+      state.bossLaserTimer += dt;
+      state.bossMeteorTimer += dt;
+      state.bossHealthTimer += dt;
+
+      if (state.bossLaserTimer >= 1.15) {
+        state.bossLaserTimer = 0;
+        state.bossLasers.push({
+          x: state.boss.x - state.boss.radius * 0.8,
+          y: state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1,
+          width: 44,
+          height: 6,
+          speed: 320
+        });
+      }
+
+      if (state.bossMeteorTimer >= 1.05) {
+        state.bossMeteorTimer = 0;
+        spawnBossMeteor();
+      }
+
+      if (state.bossHealthTimer >= 12) {
+        state.bossHealthTimer = 0;
+        addHeartAt(canvas.width + 18, Math.random() * (canvas.height - 80) + 40, 125);
+      }
     }
 
     function distance(a, b) {
@@ -575,8 +730,11 @@
     }
 
     function addScore(points) {
-      state.score += points;
-      if (state.score >= GOAL_POINTS) finish(true);
+      if (state.phase !== "play") return;
+      state.score = Math.min(GOAL_POINTS, state.score + points);
+      if (state.level >= 4 && state.score >= GOAL_POINTS) {
+        startBossPrep();
+      }
     }
 
     function laserHitsCircle(laser, target) {
@@ -590,6 +748,11 @@
 
       for (const laser of state.lasers) {
         if (laser.used) continue;
+        if (state.phase === "boss" && state.boss && laserHitsCircle(laser, state.boss)) {
+          state.boss.hp -= 1;
+          laser.used = true;
+          if (state.boss.hp <= 0) finish(true);
+        }
         for (const meteor of state.meteors) {
           if (!laser.used && laserHitsCircle(laser, meteor)) {
             meteor.hp -= 1;
@@ -615,6 +778,15 @@
       state.lasers = state.lasers.filter(laser => !laser.used);
       state.meteors = state.meteors.filter(meteor => !meteor.destroyed);
       state.splotches = state.splotches.filter(splotch => !splotch.destroyed);
+
+      state.bossLasers = state.bossLasers.filter(laser => {
+        const laserCenter = { x: laser.x + laser.width / 2, y: laser.y };
+        if (distance(state.ship, laserCenter) < shipHitRadius + 8) {
+          hitShip(2);
+          return false;
+        }
+        return true;
+      });
 
       state.coins = state.coins.filter(coin => {
         if (distance(state.ship, coin) < shipHitRadius + coin.radius) {
@@ -655,6 +827,10 @@
         }
         return true;
       });
+
+      if (state.phase === "boss" && state.boss && distance(state.ship, state.boss) < shipHitRadius + state.boss.radius * 0.75) {
+        hitShip(2);
+      }
     }
 
     function finish(won) {
@@ -663,7 +839,7 @@
       state.won = won;
       const title = won ? "Mission Complete!" : "Ship Destroyed";
       const summary = won
-        ? "You reached <span class=\"keyline\">100 points</span> and escaped the meteor field."
+        ? "You defeated the <span class=\"keyline\">Level 5 boss ship</span> and escaped the meteor field."
         : "The hazards took all your lives before the first checkpoint. Try again and keep moving.";
       const details = won
         ? `Final time: ${Math.floor(state.elapsed)} seconds.`
@@ -778,6 +954,17 @@
       ctx.restore();
     }
 
+    function drawBossLaser(laser) {
+      ctx.save();
+      ctx.shadowColor = "#ff6978";
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = "#ff6978";
+      ctx.fillRect(laser.x, laser.y - laser.height / 2, laser.width, laser.height);
+      ctx.fillStyle = "#ffe1e5";
+      ctx.fillRect(laser.x, laser.y - 1, 10, 2);
+      ctx.restore();
+    }
+
     function drawCoin(coin) {
       const y = coin.y + Math.sin(coin.bob) * 5;
       ctx.save();
@@ -876,13 +1063,90 @@
       ctx.restore();
     }
 
+    function drawBossShip() {
+      if (!state.boss) return;
+      const boss = state.boss;
+      ctx.save();
+      ctx.translate(boss.x, boss.y);
+      ctx.scale(4.8, 4.8);
+      ctx.fillStyle = "#2b3148";
+      ctx.strokeStyle = "#ff6978";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-24, 0);
+      ctx.lineTo(18, -22);
+      ctx.lineTo(13, -7);
+      ctx.lineTo(27, -4);
+      ctx.lineTo(27, 4);
+      ctx.lineTo(13, 7);
+      ctx.lineTo(18, 22);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#a32537";
+      ctx.beginPath();
+      ctx.ellipse(-1, 0, 10, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#74d2ff";
+      ctx.beginPath();
+      ctx.moveTo(-28, -8);
+      ctx.lineTo(-43 - Math.random() * 3, 0);
+      ctx.lineTo(-28, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawBossHud() {
+      if (state.phase !== "boss" || !state.boss) return;
+      const width = 360;
+      const x = canvas.width / 2 - width / 2;
+      const y = 18;
+      ctx.save();
+      ctx.fillStyle = "rgba(5, 8, 20, 0.78)";
+      ctx.fillRect(x, y, width, 34);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.strokeRect(x, y, width, 34);
+      ctx.fillStyle = "#ff6978";
+      ctx.fillRect(x + 8, y + 20, (width - 16) * (state.boss.hp / state.boss.maxHp), 7);
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "bold 14px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(`Boss Health ${state.boss.hp} / ${state.boss.maxHp}`, canvas.width / 2, y + 11);
+      ctx.restore();
+    }
+
+    function drawBossMessage() {
+      if (state.phase !== "bossPrep") return;
+      let text = "Level 5 Checkpoint";
+      if (state.bossPrepTimer >= 6) {
+        const count = Math.max(1, Math.ceil(9 - state.bossPrepTimer));
+        text = `Get ready to fight the boss: ${count}`;
+      }
+
+      ctx.save();
+      ctx.fillStyle = "rgba(5, 8, 20, 0.72)";
+      ctx.fillRect(canvas.width / 2 - 210, 18, 420, 48);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+      ctx.strokeRect(canvas.width / 2 - 210, 18, 420, 48);
+      ctx.fillStyle = "#f4f7fb";
+      ctx.font = "bold 20px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, 42);
+      ctx.restore();
+    }
+
     function drawLevelNotice() {
       const nearLevelStart = state.elapsed < 3
         || (state.elapsed > 15 && state.elapsed < 18)
         || (state.elapsed > 45 && state.elapsed < 48)
         || (state.elapsed > 60 && state.elapsed < 63)
         || state.checkpointNotice > 0;
-      if (nearLevelStart) {
+      if (nearLevelStart && state.phase !== "bossPrep") {
         ctx.save();
         ctx.fillStyle = "rgba(5, 8, 20, 0.64)";
         ctx.fillRect(canvas.width / 2 - 150, 18, 300, 42);
@@ -902,11 +1166,15 @@
       for (const coin of state.coins) drawCoin(coin);
       for (const heart of state.hearts) drawHeart(heart);
       for (const laser of state.lasers) drawLaser(laser);
+      for (const bossLaser of state.bossLasers) drawBossLaser(bossLaser);
       for (const meteor of state.meteors) drawMeteor(meteor);
       for (const spike of state.spikes) drawSpike(spike);
       for (const splotch of state.splotches) drawSplotch(splotch);
+      drawBossShip();
       drawShip();
       drawLevelNotice();
+      drawBossMessage();
+      drawBossHud();
     }
 
     function loop(now) {
@@ -923,6 +1191,9 @@
         state.spikes = [];
         state.splotches = [];
         state.lasers = [];
+      }
+      if (state.phase === "play" && state.level >= 4 && state.score >= GOAL_POINTS) {
+        startBossPrep();
       }
       state.ship.speed = levelSettings().shipSpeed;
 
