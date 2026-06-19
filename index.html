@@ -288,6 +288,7 @@
       laserCooldown: 0,
       checkpointNotice: 0,
       ship: { x: 120, y: 270, radius: 20, speed: 250, invincible: 0 },
+      shipTrail: [],
       checkpoint: { level: 1, elapsed: 0, score: 0 },
       boss: null,
       meteors: [],
@@ -336,6 +337,7 @@
       state.ship.y = canvas.height / 2;
       state.ship.speed = 250;
       state.ship.invincible = 0;
+      state.shipTrail = [];
       overlay.classList.add("hidden");
       updateHud();
       requestAnimationFrame(loop);
@@ -513,13 +515,14 @@
         x: canvas.width - 150,
         y: canvas.height / 2,
         radius: state.ship.radius * 5,
-        hp: 80,
-        maxHp: 80,
+        hp: 200,
+        maxHp: 200,
         drift: 0
       };
       state.ship.x = 120;
       state.ship.y = canvas.height / 2;
       state.ship.invincible = 2;
+      state.shipTrail = [];
       state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true };
     }
 
@@ -602,6 +605,8 @@
       ship.x = Math.max(ship.radius + 6, Math.min(canvas.width - ship.radius - 6, ship.x));
       ship.y = Math.max(ship.radius + 6, Math.min(canvas.height - ship.radius - 6, ship.y));
       ship.invincible = Math.max(0, ship.invincible - dt);
+      state.shipTrail.push({ time: state.elapsed, y: ship.y });
+      state.shipTrail = state.shipTrail.filter(point => state.elapsed - point.time <= 1.4);
     }
 
     function updateObjects(dt) {
@@ -726,7 +731,7 @@
           state.bossLaserTimer = 0.2;
         }
       } else if (state.bossAttackMode === "green") {
-        if (state.bossLaserTimer >= 0.85) {
+        if (state.bossLaserTimer >= 1.05) {
           state.bossLaserTimer = 0;
           fireBossLaser("green");
         }
@@ -750,14 +755,17 @@
     }
 
     function fireBossLaser(kind) {
-      const targetY = kind === "green" ? state.ship.y : state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1;
+      const pastShip = state.shipTrail.find(point => state.elapsed - point.time >= 1) || state.shipTrail[0];
+      const targetY = kind === "green"
+        ? (pastShip ? pastShip.y : state.ship.y)
+        : state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1;
       state.bossLasers.push({
         x: state.boss.x - state.boss.radius * 0.82,
         y: targetY,
         width: kind === "green" ? 64 : 44,
         height: kind === "green" ? 9 : 6,
         vx: kind === "green" ? -390 : -330,
-        vy: kind === "green" ? (state.ship.y - targetY) * 0.45 : 0,
+        vy: 0,
         damage: kind === "green" ? 999 : 2,
         kind
       });
