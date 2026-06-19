@@ -284,6 +284,7 @@
       bossHealthTimer: 0,
       bossAttackTimer: 0,
       bossBurstCount: 0,
+      bossCycleCount: 0,
       bossAttackMode: "burst",
       laserCooldown: 0,
       checkpointNotice: 0,
@@ -321,6 +322,7 @@
       state.bossHealthTimer = 0;
       state.bossAttackTimer = 0;
       state.bossBurstCount = 0;
+      state.bossCycleCount = 0;
       state.bossAttackMode = "burst";
       state.laserCooldown = 0;
       state.checkpointNotice = 2.5;
@@ -506,6 +508,7 @@
       state.bossHealthTimer = 0;
       state.bossAttackTimer = 0;
       state.bossBurstCount = 0;
+      state.bossCycleCount = 0;
       state.bossAttackMode = "burst";
       state.laserCooldown = 0;
       state.checkpointNotice = fromCheckpoint ? 2.5 : 3;
@@ -515,8 +518,8 @@
         x: canvas.width - 150,
         y: canvas.height / 2,
         radius: state.ship.radius * 5,
-        hp: 200,
-        maxHp: 200,
+        hp: 300,
+        maxHp: 300,
         drift: 0
       };
       state.ship.x = 120;
@@ -733,9 +736,10 @@
       } else if (state.bossAttackMode === "green") {
         if (state.bossLaserTimer >= 1.05) {
           state.bossLaserTimer = 0;
-          fireBossLaser("green");
+          fireGreenLasers();
         }
         if (state.bossAttackTimer >= 10) {
+          state.bossCycleCount += 1;
           state.bossAttackMode = "burst";
           state.bossAttackTimer = 0;
           state.bossLaserTimer = 0;
@@ -754,10 +758,18 @@
       }
     }
 
-    function fireBossLaser(kind) {
+    function fireGreenLasers() {
+      const shots = state.bossCycleCount >= 1 ? 2 : 1;
+      for (let i = 0; i < shots; i += 1) {
+        fireBossLaser("green", i, shots);
+      }
+    }
+
+    function fireBossLaser(kind, index = 0, total = 1) {
       const pastShip = state.shipTrail.find(point => state.elapsed - point.time >= 1) || state.shipTrail[0];
+      const spread = (index - (total - 1) / 2) * 34;
       const targetY = kind === "green"
-        ? (pastShip ? pastShip.y : state.ship.y)
+        ? (pastShip ? pastShip.y + spread : state.ship.y + spread)
         : state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1;
       state.bossLasers.push({
         x: state.boss.x - state.boss.radius * 0.82,
@@ -782,7 +794,7 @@
           height: 5,
           vx: Math.cos(angle) * 245,
           vy: Math.sin(angle) * 245,
-          damage: 2,
+          damage: 3,
           kind: "burst"
         });
       }

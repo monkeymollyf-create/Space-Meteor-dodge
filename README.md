@@ -13,4 +13,4 @@ Open `index.html` in a browser, or serve this folder with any static web server.
 
 ## Goal
 
-Reach 100 points on level 4 to unlock level 5. Collect the health bonuses and keep those extra lives for the boss fight, survive the countdown, then defeat the 200 HP boss ship. The boss cycles through outward burst lasers, normal shots, and green instant-defeat lasers that target where you were about one second earlier.
+Reach 100 points on level 4 to unlock level 5. Collect the health bonuses and keep those extra lives for the boss fight, survive the countdown, then defeat the 300 HP boss ship. The boss cycles through outward burst lasers that cost 3 lives, normal shots, and green instant-defeat lasers that target where you were about one second earlier. After the first cycle, green lasers fire two at a time.
