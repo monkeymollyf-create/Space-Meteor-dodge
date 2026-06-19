@@ -282,6 +282,9 @@
       bossLaserTimer: 0,
       bossMeteorTimer: 0,
       bossHealthTimer: 0,
+      bossAttackTimer: 0,
+      bossBurstCount: 0,
+      bossAttackMode: "burst",
       laserCooldown: 0,
       checkpointNotice: 0,
       ship: { x: 120, y: 270, radius: 20, speed: 250, invincible: 0 },
@@ -315,6 +318,9 @@
       state.bossLaserTimer = 0;
       state.bossMeteorTimer = 0;
       state.bossHealthTimer = 0;
+      state.bossAttackTimer = 0;
+      state.bossBurstCount = 0;
+      state.bossAttackMode = "burst";
       state.laserCooldown = 0;
       state.checkpointNotice = 2.5;
       state.meteors = [];
@@ -496,6 +502,9 @@
       state.bossLaserTimer = 0.8;
       state.bossMeteorTimer = 0;
       state.bossHealthTimer = 0;
+      state.bossAttackTimer = 0;
+      state.bossBurstCount = 0;
+      state.bossAttackMode = "burst";
       state.laserCooldown = 0;
       state.checkpointNotice = fromCheckpoint ? 2.5 : 3;
       clearHazards();
@@ -653,7 +662,8 @@
         laser.x += laser.speed * dt;
       }
       for (const bossLaser of state.bossLasers) {
-        bossLaser.x -= bossLaser.speed * dt;
+        bossLaser.x += bossLaser.vx * dt;
+        bossLaser.y += bossLaser.vy * dt;
       }
       for (const coin of state.coins) {
         coin.x -= coin.speed * dt;
@@ -674,7 +684,12 @@
 
       state.meteors = state.meteors.filter(item => item.x > -item.radius - 10);
       state.lasers = state.lasers.filter(item => item.x < canvas.width + item.width);
-      state.bossLasers = state.bossLasers.filter(item => item.x > -item.width - 10);
+      state.bossLasers = state.bossLasers.filter(item =>
+        item.x > -item.width - 40
+        && item.x < canvas.width + item.width + 40
+        && item.y > -item.height - 40
+        && item.y < canvas.height + item.height + 40
+      );
       state.coins = state.coins.filter(item => item.x > -item.radius - 10);
       state.hearts = state.hearts.filter(item => item.x > -item.radius - 10);
       state.spikes = state.spikes.filter(item => item.x > -item.radius - 18);
@@ -684,21 +699,43 @@
     function updateBossFight(dt) {
       if (!state.boss) return;
       state.boss.drift += dt;
-      state.boss.y = canvas.height / 2 + Math.sin(state.boss.drift * 1.2) * 115;
+      state.boss.y = canvas.height / 2 + Math.sin(state.boss.drift * 2.15) * 160;
 
       state.bossLaserTimer += dt;
+      state.bossAttackTimer += dt;
       state.bossMeteorTimer += dt;
       state.bossHealthTimer += dt;
 
-      if (state.bossLaserTimer >= 1.15) {
-        state.bossLaserTimer = 0;
-        state.bossLasers.push({
-          x: state.boss.x - state.boss.radius * 0.8,
-          y: state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1,
-          width: 44,
-          height: 6,
-          speed: 320
-        });
+      if (state.bossAttackMode === "burst" && state.bossAttackTimer >= 1.05) {
+        state.bossAttackTimer = 0;
+        state.bossBurstCount += 1;
+        fireBossBurst();
+        if (state.bossBurstCount >= 3) {
+          state.bossAttackMode = "normal";
+          state.bossAttackTimer = 0;
+          state.bossLaserTimer = 0.35;
+        }
+      } else if (state.bossAttackMode === "normal") {
+        if (state.bossLaserTimer >= 1.05) {
+          state.bossLaserTimer = 0;
+          fireBossLaser("normal");
+        }
+        if (state.bossAttackTimer >= 7) {
+          state.bossAttackMode = "green";
+          state.bossAttackTimer = 0;
+          state.bossLaserTimer = 0.2;
+        }
+      } else if (state.bossAttackMode === "green") {
+        if (state.bossLaserTimer >= 0.85) {
+          state.bossLaserTimer = 0;
+          fireBossLaser("green");
+        }
+        if (state.bossAttackTimer >= 10) {
+          state.bossAttackMode = "burst";
+          state.bossAttackTimer = 0;
+          state.bossLaserTimer = 0;
+          state.bossBurstCount = 0;
+        }
       }
 
       if (state.bossMeteorTimer >= 1.05) {
@@ -712,12 +749,43 @@
       }
     }
 
+    function fireBossLaser(kind) {
+      const targetY = kind === "green" ? state.ship.y : state.boss.y + (Math.random() - 0.5) * state.boss.radius * 1.1;
+      state.bossLasers.push({
+        x: state.boss.x - state.boss.radius * 0.82,
+        y: targetY,
+        width: kind === "green" ? 64 : 44,
+        height: kind === "green" ? 9 : 6,
+        vx: kind === "green" ? -390 : -330,
+        vy: kind === "green" ? (state.ship.y - targetY) * 0.45 : 0,
+        damage: kind === "green" ? 999 : 2,
+        kind
+      });
+    }
+
+    function fireBossBurst() {
+      const count = 18;
+      for (let i = 0; i < count; i += 1) {
+        const angle = (i / count) * Math.PI * 2;
+        state.bossLasers.push({
+          x: state.boss.x - state.boss.radius * 0.18,
+          y: state.boss.y,
+          width: 34,
+          height: 5,
+          vx: Math.cos(angle) * 245,
+          vy: Math.sin(angle) * 245,
+          damage: 2,
+          kind: "burst"
+        });
+      }
+    }
+
     function distance(a, b) {
       return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
-    function hitShip(amount) {
-      if (state.ship.invincible > 0) return;
+    function hitShip(amount, ignoreInvincible = false) {
+      if (!ignoreInvincible && state.ship.invincible > 0) return;
       state.lives -= amount;
       state.ship.invincible = 1.1;
       if (state.lives <= 0) {
@@ -779,10 +847,13 @@
       state.meteors = state.meteors.filter(meteor => !meteor.destroyed);
       state.splotches = state.splotches.filter(splotch => !splotch.destroyed);
 
+      let bossLaserDeath = false;
       state.bossLasers = state.bossLasers.filter(laser => {
-        const laserCenter = { x: laser.x + laser.width / 2, y: laser.y };
+        if (bossLaserDeath) return false;
+        const laserCenter = { x: laser.x, y: laser.y };
         if (distance(state.ship, laserCenter) < shipHitRadius + 8) {
-          hitShip(2);
+          bossLaserDeath = state.lives - laser.damage <= 0;
+          hitShip(laser.damage, laser.kind === "green");
           return false;
         }
         return true;
@@ -956,12 +1027,17 @@
 
     function drawBossLaser(laser) {
       ctx.save();
-      ctx.shadowColor = "#ff6978";
+      const isGreen = laser.kind === "green";
+      const isBurst = laser.kind === "burst";
+      const angle = Math.atan2(laser.vy, laser.vx);
+      ctx.translate(laser.x, laser.y);
+      ctx.rotate(angle);
+      ctx.shadowColor = isGreen ? "#73ff7c" : isBurst ? "#ff9f6e" : "#ff6978";
       ctx.shadowBlur = 14;
-      ctx.fillStyle = "#ff6978";
-      ctx.fillRect(laser.x, laser.y - laser.height / 2, laser.width, laser.height);
-      ctx.fillStyle = "#ffe1e5";
-      ctx.fillRect(laser.x, laser.y - 1, 10, 2);
+      ctx.fillStyle = isGreen ? "#61ff6f" : isBurst ? "#ff9f6e" : "#ff6978";
+      ctx.fillRect(-laser.width / 2, -laser.height / 2, laser.width, laser.height);
+      ctx.fillStyle = isGreen ? "#ecffef" : "#ffe1e5";
+      ctx.fillRect(-laser.width / 2, -1, 10, 2);
       ctx.restore();
     }
 
