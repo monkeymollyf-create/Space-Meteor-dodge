@@ -495,10 +495,10 @@
       state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true };
     }
 
-    function startBossFight(fromCheckpoint = false) {
+    function startBossFight(fromCheckpoint = false, checkpointLives = null) {
       state.phase = "boss";
       state.score = GOAL_POINTS;
-      state.lives = FULL_LIVES;
+      state.lives = checkpointLives ?? Math.max(FULL_LIVES, state.lives);
       state.level = 5;
       state.bossPrepTimer = 0;
       state.bossLaserTimer = 0.8;
@@ -523,7 +523,7 @@
       state.ship.y = canvas.height / 2;
       state.ship.invincible = 2;
       state.shipTrail = [];
-      state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true };
+      state.checkpoint = { level: 5, elapsed: state.elapsed, score: GOAL_POINTS, boss: true, lives: state.lives };
     }
 
     function fireLasers() {
@@ -555,7 +555,7 @@
     function respawnAtCheckpoint() {
       const checkpoint = state.checkpoint;
       if (checkpoint.boss) {
-        startBossFight(true);
+        startBossFight(true, checkpoint.lives ?? FULL_LIVES);
         return;
       }
       state.running = true;
